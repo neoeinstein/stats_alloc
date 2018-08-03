@@ -1,16 +1,18 @@
 [package]
 name = "stats_alloc"
-version = "0.1.4"
+version = "0.1.5-alpha.0"
 authors = ["Marcus Griep <mgriep@griep.us>"]
 description = "An allocator wrapper that allows for instrumenting global allocators"
 keywords = ["alloc", "instrument", "stats"]
 license = "MIT"
 repository = "https://github.com/neoeinstein/stats_alloc"
-documentation = "https://docs.rs/stats_alloc"
+documentation = "https://neoeinstein.github.io/stats_alloc"
 readme = "README.md"
 exclude = [
     ".gitignore",
     ".editorconfig",
+    "release.toml",
+    "rustfmt.toml",
     "tests/**/*",
 ]
 
