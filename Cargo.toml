@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Marcus Griep <mgriep@griep.us>"]
 description = "An allocator wrapper that allows for instrumenting global allocators"
 keywords = ["alloc", "instrument", "stats"]
+license = "MIT"
+repository = "https://github.com/neoeinstein/stats_alloc"
+documentation = "https://docs.rs/stats_alloc"
 exclude = [
     ".gitignore",
 ]
