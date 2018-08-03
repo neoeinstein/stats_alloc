@@ -8,22 +8,23 @@
 //! ```
 //! extern crate stats_alloc;
 //!
-//! use stats_alloc::{StatsAlloc, Region};
+//! use stats_alloc::{StatsAlloc, Region, INSTRUMENTED_SYSTEM};
 //! use std::alloc::System;
 //!
 //! #[global_allocator]
-//! static STATS_ALLOC: StatsAlloc<System> = StatsAlloc::system();
+//! static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 //!
 //! fn main() {
-//!     let reg = Region::new(&STATS_ALLOC);
+//!     let reg = Region::new(&GLOBAL);
 //!     let x: Vec<u8> = Vec::with_capacity(1_024);
 //!     println!("Stats at 1: {:#?}", reg.change());
-//!     // Used here to esnure that the value isn't deallocated first
+//!     // Used here to esnure that the value is not
+//!     // dropped before we check the statistics
 //!     ::std::mem::size_of_val(&x);
 //! }
 //! ```
 
-#![feature(const_fn)]
+#![cfg_attr(feature = "nightly", feature(const_fn))]
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::ops;
@@ -50,14 +51,46 @@ pub struct Stats {
     bytes_reallocated: isize,
 }
 
+pub static INSTRUMENTED_SYSTEM: StatsAlloc<System> =
+    StatsAlloc {
+        allocations: AtomicUsize::new(0),
+        deallocations: AtomicUsize::new(0),
+        reallocations: AtomicUsize::new(0),
+        bytes_allocated: AtomicUsize::new(0),
+        bytes_deallocated: AtomicUsize::new(0),
+        bytes_reallocated: AtomicIsize::new(0),
+        inner: System,
+    };
+
+
 impl StatsAlloc<System> {
+    #[cfg(feature = "nightly")]
     pub const fn system() -> Self {
+        Self::new(System)
+    }
+
+    #[cfg(not(feature = "nightly"))]
+    pub fn system() -> Self {
         Self::new(System)
     }
 }
 
 impl<T: GlobalAlloc> StatsAlloc<T> {
+    #[cfg(feature = "nightly")]
     pub const fn new(inner: T) -> Self {
+        StatsAlloc {
+            allocations: AtomicUsize::new(0),
+            deallocations: AtomicUsize::new(0),
+            reallocations: AtomicUsize::new(0),
+            bytes_allocated: AtomicUsize::new(0),
+            bytes_deallocated: AtomicUsize::new(0),
+            bytes_reallocated: AtomicIsize::new(0),
+            inner,
+        }
+    }
+
+    #[cfg(not(feature = "nightly"))]
+    pub fn new(inner: T) -> Self {
         StatsAlloc {
             allocations: AtomicUsize::new(0),
             deallocations: AtomicUsize::new(0),
@@ -127,6 +160,24 @@ impl<'a, T: GlobalAlloc + 'a> Region<'a, T> {
         let diff = latest - self.initial_stats;
         self.initial_stats = latest;
         diff
+    }
+}
+
+unsafe impl<'a, T: GlobalAlloc + 'a> GlobalAlloc for &'a StatsAlloc<T> {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        (*self).alloc(layout)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        (*self).dealloc(ptr, layout)
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        (*self).alloc_zeroed(layout)
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        (*self).realloc(ptr, layout, new_size)
     }
 }
 

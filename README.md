@@ -9,17 +9,18 @@ production loads to monitor for memory leaks.
 ```rust
 extern crate stats_alloc;
 
-use stats_alloc::{StatsAlloc, Region};
+use stats_alloc::{StatsAlloc, Region, INSTRUMENTED_SYSTEM};
 use std::alloc::System;
 
 #[global_allocator]
-static STATS_ALLOC: StatsAlloc<System> = StatsAlloc::system();
+static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
 fn example_using_region() {
-    let reg = Region::new(&STATS_ALLOC);
+    let reg = Region::new(&GLOBAL);
     let x: Vec<u8> = Vec::with_capacity(1_024);
     println!("Stats at 1: {:#?}", reg.change());
-    // Used here to esnure that the value isn't deallocated first
+    // Used here to esnure that the value is not
+    // dropped before we check the statistics
     ::std::mem::size_of_val(&x);
 }
 ``` 

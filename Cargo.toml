@@ -13,3 +13,7 @@ exclude = [
     ".editorconfig",
     "tests/**/*",
 ]
+
+[features]
+default = []
+nightly = []
