@@ -1,6 +1,6 @@
 extern crate stats_alloc;
 
-use stats_alloc::{StatsAlloc, Region, INSTRUMENTED_SYSTEM};
+use stats_alloc::{Region, StatsAlloc, INSTRUMENTED_SYSTEM};
 use std::alloc::System;
 
 #[global_allocator]

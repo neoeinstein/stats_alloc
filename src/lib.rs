@@ -8,7 +8,7 @@
 //! ```
 //! extern crate stats_alloc;
 //!
-//! use stats_alloc::{StatsAlloc, Region, INSTRUMENTED_SYSTEM};
+//! use stats_alloc::{Region, StatsAlloc, INSTRUMENTED_SYSTEM};
 //! use std::alloc::System;
 //!
 //! #[global_allocator]
@@ -24,12 +24,27 @@
 //! }
 //! ```
 
+#![deny(
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_import_braces,
+    unused_imports,
+    unused_qualifications,
+    missing_docs
+)]
 #![cfg_attr(feature = "nightly", feature(const_fn))]
+#![cfg_attr(feature = "docs-rs", feature(allocator_api))]
 
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::ops;
-use std::sync::atomic::{AtomicUsize, AtomicIsize, Ordering};
+use std::{
+    alloc::{GlobalAlloc, Layout, System},
+    ops,
+    sync::atomic::{AtomicIsize, AtomicUsize, Ordering},
+};
 
+/// An instrumenting middleware which keeps track of allocation, deallocation,
+/// and reallocation requests to the underlying global allocator.
 #[derive(Default, Debug)]
 pub struct StatsAlloc<T: GlobalAlloc> {
     allocations: AtomicUsize,
@@ -41,6 +56,7 @@ pub struct StatsAlloc<T: GlobalAlloc> {
     inner: T,
 }
 
+/// Allocator statistics
 #[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 pub struct Stats {
     allocations: usize,
@@ -51,24 +67,25 @@ pub struct Stats {
     bytes_reallocated: isize,
 }
 
-pub static INSTRUMENTED_SYSTEM: StatsAlloc<System> =
-    StatsAlloc {
-        allocations: AtomicUsize::new(0),
-        deallocations: AtomicUsize::new(0),
-        reallocations: AtomicUsize::new(0),
-        bytes_allocated: AtomicUsize::new(0),
-        bytes_deallocated: AtomicUsize::new(0),
-        bytes_reallocated: AtomicIsize::new(0),
-        inner: System,
-    };
-
+/// An instrumented instance of the system allocator.
+pub static INSTRUMENTED_SYSTEM: StatsAlloc<System> = StatsAlloc {
+    allocations: AtomicUsize::new(0),
+    deallocations: AtomicUsize::new(0),
+    reallocations: AtomicUsize::new(0),
+    bytes_allocated: AtomicUsize::new(0),
+    bytes_deallocated: AtomicUsize::new(0),
+    bytes_reallocated: AtomicIsize::new(0),
+    inner: System,
+};
 
 impl StatsAlloc<System> {
+    /// Provides access to an instrumented instance of the system allocator.
     #[cfg(feature = "nightly")]
     pub const fn system() -> Self {
         Self::new(System)
     }
 
+    /// Provides access to an instrumented instance of the system allocator.
     #[cfg(not(feature = "nightly"))]
     pub fn system() -> Self {
         Self::new(System)
@@ -76,6 +93,8 @@ impl StatsAlloc<System> {
 }
 
 impl<T: GlobalAlloc> StatsAlloc<T> {
+    /// Provides access to an instrumented instance of the given global
+    /// allocator.
     #[cfg(feature = "nightly")]
     pub const fn new(inner: T) -> Self {
         StatsAlloc {
@@ -89,6 +108,8 @@ impl<T: GlobalAlloc> StatsAlloc<T> {
         }
     }
 
+    /// Provides access to an instrumented instance of the given global
+    /// allocator.
     #[cfg(not(feature = "nightly"))]
     pub fn new(inner: T) -> Self {
         StatsAlloc {
@@ -102,6 +123,7 @@ impl<T: GlobalAlloc> StatsAlloc<T> {
         }
     }
 
+    /// Takes a snapshot of the current view of the allocator statistics.
     pub fn stats(&self) -> Stats {
         Stats {
             allocations: self.allocations.load(Ordering::SeqCst),
@@ -134,12 +156,17 @@ impl ops::SubAssign for Stats {
     }
 }
 
+/// A snapshot of the allocation statistics, which can be used to determine
+/// allocation changes while the `Region` is alive.
 pub struct Region<'a, T: GlobalAlloc + 'a> {
     alloc: &'a StatsAlloc<T>,
     initial_stats: Stats,
 }
 
 impl<'a, T: GlobalAlloc + 'a> Region<'a, T> {
+    /// Creates a new region using statistics from the given instrumented
+    /// allocator.
+    #[inline]
     pub fn new(alloc: &'a StatsAlloc<T>) -> Self {
         Region {
             alloc,
@@ -147,19 +174,35 @@ impl<'a, T: GlobalAlloc + 'a> Region<'a, T> {
         }
     }
 
+    /// Returns the statistics as of instantiation or the last reset.
+    #[inline]
     pub fn initial(&self) -> Stats {
         self.initial_stats
     }
 
+    /// Returns the difference between the currently reported statistics and
+    /// those provided by `initial()`.
+    #[inline]
     pub fn change(&self) -> Stats {
         self.alloc.stats() - self.initial_stats
     }
 
+    /// Returns the difference between the currently reported statistics and
+    /// those provided by `initial()`, resetting initial to the latest
+    /// reported statistics.
+    #[inline]
     pub fn change_and_reset(&mut self) -> Stats {
         let latest = self.alloc.stats();
         let diff = latest - self.initial_stats;
         self.initial_stats = latest;
         diff
+    }
+
+    /// Resets the initial initial to the latest reported statistics from the
+    /// referenced allocator.
+    #[inline]
+    pub fn reset(&mut self) {
+        self.initial_stats = self.alloc.stats();
     }
 }
 
@@ -187,6 +230,7 @@ unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
         self.bytes_allocated.fetch_add(layout.size(), Ordering::SeqCst);
         self.inner.alloc(layout)
     }
+
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         self.deallocations.fetch_add(1, Ordering::SeqCst);
         self.bytes_deallocated.fetch_add(layout.size(), Ordering::SeqCst);
@@ -202,11 +246,14 @@ unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         self.reallocations.fetch_add(1, Ordering::SeqCst);
         if new_size > layout.size() {
-            self.bytes_allocated.fetch_add(new_size - layout.size(), Ordering::SeqCst);
+            let difference = new_size - layout.size();
+            self.bytes_allocated.fetch_add(difference, Ordering::SeqCst);
         } else if new_size < layout.size() {
-            self.bytes_deallocated.fetch_add(layout.size() - new_size, Ordering::SeqCst);
+            let difference = layout.size() - new_size;
+            self.bytes_deallocated.fetch_add(difference, Ordering::SeqCst);
         }
-        self.bytes_reallocated.fetch_add(new_size.wrapping_sub(layout.size()) as isize, Ordering::SeqCst);
+        self.bytes_reallocated
+            .fetch_add(new_size.wrapping_sub(layout.size()) as isize, Ordering::SeqCst);
         self.inner.realloc(ptr, layout, new_size)
     }
 }

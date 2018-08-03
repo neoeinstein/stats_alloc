@@ -2,7 +2,7 @@
 
 extern crate stats_alloc;
 
-use stats_alloc::{StatsAlloc, Region};
+use stats_alloc::{Region, StatsAlloc};
 use std::alloc::System;
 
 #[global_allocator]
