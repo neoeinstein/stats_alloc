@@ -1,10 +1,12 @@
+#![cfg(feature = "nightly")]
+
 extern crate stats_alloc;
 
-use stats_alloc::{StatsAlloc, Region, INSTRUMENTED_SYSTEM};
+use stats_alloc::{StatsAlloc, Region};
 use std::alloc::System;
 
 #[global_allocator]
-static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
+static GLOBAL: StatsAlloc<System> = StatsAlloc::system();
 
 #[test]
 fn example_using_region() {
