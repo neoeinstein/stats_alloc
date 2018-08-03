@@ -158,6 +158,7 @@ impl ops::SubAssign for Stats {
 
 /// A snapshot of the allocation statistics, which can be used to determine
 /// allocation changes while the `Region` is alive.
+#[derive(Debug)]
 pub struct Region<'a, T: GlobalAlloc + 'a> {
     alloc: &'a StatsAlloc<T>,
     initial_stats: Stats,
