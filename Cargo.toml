@@ -6,7 +6,7 @@ description = "An allocator wrapper that allows for instrumenting global allocat
 keywords = ["alloc", "instrument", "stats"]
 license = "MIT"
 repository = "https://github.com/neoeinstein/stats_alloc"
-documentation = "https://neoeinstein.github.io/stats_alloc"
+documentation = "https://neoeinstein.github.io/stats_alloc/stats_alloc/"
 readme = "README.md"
 exclude = [
     ".gitignore",
