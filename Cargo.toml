@@ -1,6 +1,6 @@
 [package]
 name = "stats_alloc"
-version = "0.1.7-alpha.0"
+version = "0.2.0-alpha.0"
 authors = ["Marcus Griep <mgriep@griep.us>"]
 description = "An allocator wrapper that allows for instrumenting global allocators"
 keywords = ["alloc", "instrument", "stats"]
@@ -16,9 +16,16 @@ exclude = [
     "tests/**/*",
 ]
 
+[profile.test]
+opt-level = 3
+
+[dependencies.spin]
+version = "0.4.8"
+default-features = false
+
 [features]
 default = []
-nightly = []
+nightly = [ "spin/unstable" ]
 docs-rs = [ "nightly" ]
 
 [package.metadata.docs.rs]
