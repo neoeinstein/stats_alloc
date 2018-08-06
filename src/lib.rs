@@ -25,20 +25,25 @@
 //! ```
 
 #![deny(
-    missing_debug_implementations,
+    bare_trait_object,
     missing_copy_implementations,
+    missing_debug_implementations,
+    missing_docs,
     trivial_casts,
     trivial_numeric_casts,
+    unreachable_pub
+    unused_extern_crates,
     unused_import_braces,
     unused_imports,
     unused_qualifications,
 )]
-//    missing_docs,
 #![cfg_attr(feature = "nightly", feature(const_fn))]
 #![cfg_attr(feature = "docs-rs", feature(allocator_api))]
 
 extern crate spin;
-extern crate core;
+#[cfg(not(feature = "nightly"))]
+#[macro_use]
+extern crate lazy_static;
 
 mod accum;
 mod global_alloc;

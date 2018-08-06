@@ -9,22 +9,24 @@ repository = "https://github.com/neoeinstein/stats_alloc"
 documentation = "https://neoeinstein.github.io/stats_alloc/stats_alloc/"
 readme = "README.md"
 exclude = [
-    ".gitignore",
     ".editorconfig",
+    ".gitignore",
+    ".idea/**/*",
     "release.toml",
     "rustfmt.toml",
     "tests/**/*",
 ]
 
-[profile.test]
-opt-level = 3
-
 [dependencies.spin]
 version = "0.4.8"
 default-features = false
 
+[dependencies.lazy_static]
+version = "1.1.0"
+optional = true
+
 [features]
-default = []
+default = [ "lazy_static" ]
 nightly = [ "spin/unstable" ]
 docs-rs = [ "nightly" ]
 

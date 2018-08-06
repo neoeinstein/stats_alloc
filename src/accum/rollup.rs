@@ -1,7 +1,13 @@
 use spin::Mutex;
 use summary::Summary;
 
+#[cfg(feature = "nightly")]
 pub(crate) static GLOBAL_ALLOC_STATS: Rollup = Rollup::new();
+
+#[cfg(not(feature = "nightly"))]
+lazy_static! {
+    pub(crate) static ref GLOBAL_ALLOC_STATS: Rollup = Rollup::new();
+}
 
 /// TODO
 #[derive(Debug)]
