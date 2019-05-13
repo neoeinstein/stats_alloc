@@ -59,12 +59,12 @@ pub struct StatsAlloc<T: GlobalAlloc> {
 /// Allocator statistics
 #[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 pub struct Stats {
-    allocations: usize,
-    deallocations: usize,
-    reallocations: usize,
-    bytes_allocated: usize,
-    bytes_deallocated: usize,
-    bytes_reallocated: isize,
+    pub allocations: usize,
+    pub deallocations: usize,
+    pub reallocations: usize,
+    pub bytes_allocated: usize,
+    pub bytes_deallocated: usize,
+    pub bytes_reallocated: isize,
 }
 
 /// An instrumented instance of the system allocator.
