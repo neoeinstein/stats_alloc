@@ -1,6 +1,6 @@
 [package]
 name = "stats_alloc"
-version = "0.1.8-alpha.0"
+version = "0.1.8"
 authors = ["Marcus Griep <mgriep@griep.us>"]
 description = "An allocator wrapper that allows for instrumenting global allocators"
 keywords = ["alloc", "instrument", "stats"]
