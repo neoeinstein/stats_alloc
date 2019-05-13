@@ -59,11 +59,33 @@ pub struct StatsAlloc<T: GlobalAlloc> {
 /// Allocator statistics
 #[derive(Clone, Copy, Default, Debug, Hash, PartialEq, Eq)]
 pub struct Stats {
+    /// Count of allocation operations
     pub allocations: usize,
+    /// Count of deallocation operations
     pub deallocations: usize,
+    /// Count of reallocation operations
+    ///
+    /// An example where reallocation may occur: resizing of a `Vec<T>` when
+    /// its length would excceed its capacity. Excessive reallocations may
+    /// indicate that resizable data structures are being created with
+    /// insufficient or poorly estimated initial capcities.
+    ///
+    /// ```
+    /// let mut x = Vec::with_capacity(1);
+    /// x.push(0);
+    /// x.push(1); // Potential reallocation
+    /// ```
     pub reallocations: usize,
+    /// Total bytes requested by allocations
     pub bytes_allocated: usize,
+    /// Total bytes freed by deallocations
     pub bytes_deallocated: usize,
+    /// Total of bytes requested minus bytes freed by reallocations
+    ///
+    /// This number is positive if the total bytes requested by reallocation
+    /// operations is greater than the total bytes freed by reallocations. A
+    /// positive value indicates that resizable structures are growing, while
+    /// a negative value indicates that such structures are shrinking.
     pub bytes_reallocated: isize,
 }
 
