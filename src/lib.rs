@@ -102,15 +102,16 @@ pub static INSTRUMENTED_SYSTEM: StatsAlloc<System> = StatsAlloc {
 
 impl StatsAlloc<System> {
     /// Provides access to an instrumented instance of the system allocator.
-    #[cfg(feature = "nightly")]
     pub const fn system() -> Self {
-        Self::new(System)
-    }
-
-    /// Provides access to an instrumented instance of the system allocator.
-    #[cfg(not(feature = "nightly"))]
-    pub fn system() -> Self {
-        Self::new(System)
+        StatsAlloc {
+            allocations: AtomicUsize::new(0),
+            deallocations: AtomicUsize::new(0),
+            reallocations: AtomicUsize::new(0),
+            bytes_allocated: AtomicUsize::new(0),
+            bytes_deallocated: AtomicUsize::new(0),
+            bytes_reallocated: AtomicIsize::new(0),
+            inner: System,
+        }
     }
 }
 

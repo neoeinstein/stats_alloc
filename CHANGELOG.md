@@ -1,4 +1,7 @@
-## [Unreleased] - ReleaseDate
+## [Unreleased] — ReleaseDate
+* Make `StatsAlloc::system()` `const fn` on stable
+
+## [0.1.7] — 2019-05-13
 * Promote `Stats` fields to public and add documentation
 
 ## [0.1.6] — 2018-08-03
