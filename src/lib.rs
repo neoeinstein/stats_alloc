@@ -34,7 +34,7 @@
     unused_qualifications,
     missing_docs
 )]
-#![cfg_attr(feature = "nightly", feature(const_fn))]
+#![cfg_attr(feature = "nightly", feature(const_fn_trait_bound))]
 #![cfg_attr(feature = "docs-rs", feature(allocator_api))]
 
 use std::{
