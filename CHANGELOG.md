@@ -1,4 +1,5 @@
 ## [Unreleased] — ReleaseDate
+* Fix build on nightly
 
 ## [0.1.8] — 2019-05-13
 * Make `StatsAlloc::system()` `const fn` on stable

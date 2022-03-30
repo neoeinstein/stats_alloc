@@ -34,8 +34,8 @@
     unused_qualifications,
     missing_docs
 )]
-#![cfg_attr(feature = "nightly", feature(const_fn))]
-#![cfg_attr(feature = "docs-rs", feature(allocator_api))]
+#![cfg_attr(docsrs, feature(allocator_api))]
+#![cfg_attr(doc_cfg, feature(doc_cfg))]
 
 use std::{
     alloc::{GlobalAlloc, Layout, System},

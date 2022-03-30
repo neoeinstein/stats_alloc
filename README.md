@@ -28,9 +28,10 @@ fn example_using_region() {
 ## Custom allocators
 
 Currenty wrapping a custom allocator requires the use of the nightly compiler
-and compiling with the "nightly" feature due to the use of the unstable
-`const_fn` and the fact that the internals of the instrumenting type are not
-public. If that's fine with you, a custom allocator can be wrapped as follows:
+and compiling with the "nightly" feature due to the soon to stabilize use of
+the unstable `const_fn_trait_bound` and the fact that the internals of the
+instrumenting type are not public. If that's fine with you, a custom allocator
+can be wrapped as follows:
 
 ```rust
 #[global_allocator]
