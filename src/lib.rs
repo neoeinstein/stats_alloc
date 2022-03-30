@@ -34,7 +34,7 @@
     unused_qualifications,
     missing_docs
 )]
-#![cfg_attr(docsrs, feature(allocator_api))]
+#![cfg_attr(doc_cfg, feature(allocator_api))]
 #![cfg_attr(doc_cfg, feature(doc_cfg))]
 
 use std::{
