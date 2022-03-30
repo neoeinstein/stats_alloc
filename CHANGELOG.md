@@ -1,4 +1,6 @@
 ## [Unreleased] — ReleaseDate
+
+## [0.1.10] — 2022-03-30
 * Fix docs.rs build
 
 ## [0.1.9] — 2022-03-30
