@@ -1,4 +1,6 @@
 ## [Unreleased] — ReleaseDate
+
+## [0.1.9] — 2022-03-30
 * Fix build on nightly
 
 ## [0.1.8] — 2019-05-13
