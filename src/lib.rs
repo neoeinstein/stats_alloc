@@ -53,6 +53,7 @@ pub struct StatsAlloc<T: GlobalAlloc> {
     bytes_allocated: AtomicUsize,
     bytes_deallocated: AtomicUsize,
     bytes_reallocated: AtomicIsize,
+    peak_mem_usage: AtomicUsize,
     inner: T,
 }
 
@@ -66,9 +67,9 @@ pub struct Stats {
     /// Count of reallocation operations
     ///
     /// An example where reallocation may occur: resizing of a `Vec<T>` when
-    /// its length would excceed its capacity. Excessive reallocations may
+    /// its length would exceed its capacity. Excessive reallocations may
     /// indicate that resizable data structures are being created with
-    /// insufficient or poorly estimated initial capcities.
+    /// insufficient or poorly estimated initial capacities.
     ///
     /// ```
     /// let mut x = Vec::with_capacity(1);
@@ -90,35 +91,18 @@ pub struct Stats {
 }
 
 /// An instrumented instance of the system allocator.
-pub static INSTRUMENTED_SYSTEM: StatsAlloc<System> = StatsAlloc {
-    allocations: AtomicUsize::new(0),
-    deallocations: AtomicUsize::new(0),
-    reallocations: AtomicUsize::new(0),
-    bytes_allocated: AtomicUsize::new(0),
-    bytes_deallocated: AtomicUsize::new(0),
-    bytes_reallocated: AtomicIsize::new(0),
-    inner: System,
-};
+pub static INSTRUMENTED_SYSTEM: StatsAlloc<System> = StatsAlloc::system();
 
 impl StatsAlloc<System> {
     /// Provides access to an instrumented instance of the system allocator.
     pub const fn system() -> Self {
-        StatsAlloc {
-            allocations: AtomicUsize::new(0),
-            deallocations: AtomicUsize::new(0),
-            reallocations: AtomicUsize::new(0),
-            bytes_allocated: AtomicUsize::new(0),
-            bytes_deallocated: AtomicUsize::new(0),
-            bytes_reallocated: AtomicIsize::new(0),
-            inner: System,
-        }
+        StatsAlloc::new(System)
     }
 }
 
 impl<T: GlobalAlloc> StatsAlloc<T> {
     /// Provides access to an instrumented instance of the given global
     /// allocator.
-    #[cfg(feature = "nightly")]
     pub const fn new(inner: T) -> Self {
         StatsAlloc {
             allocations: AtomicUsize::new(0),
@@ -127,21 +111,7 @@ impl<T: GlobalAlloc> StatsAlloc<T> {
             bytes_allocated: AtomicUsize::new(0),
             bytes_deallocated: AtomicUsize::new(0),
             bytes_reallocated: AtomicIsize::new(0),
-            inner,
-        }
-    }
-
-    /// Provides access to an instrumented instance of the given global
-    /// allocator.
-    #[cfg(not(feature = "nightly"))]
-    pub fn new(inner: T) -> Self {
-        StatsAlloc {
-            allocations: AtomicUsize::new(0),
-            deallocations: AtomicUsize::new(0),
-            reallocations: AtomicUsize::new(0),
-            bytes_allocated: AtomicUsize::new(0),
-            bytes_deallocated: AtomicUsize::new(0),
-            bytes_reallocated: AtomicIsize::new(0),
+            peak_mem_usage: AtomicUsize::new(0),
             inner,
         }
     }
@@ -156,6 +126,22 @@ impl<T: GlobalAlloc> StatsAlloc<T> {
             bytes_deallocated: self.bytes_deallocated.load(Ordering::SeqCst),
             bytes_reallocated: self.bytes_reallocated.load(Ordering::SeqCst),
         }
+    }
+
+    /// Maximum number of bytes that have been simultaneously allocated.
+    ///
+    /// It is the maximal value that `bytes_allocated - bytes_deallocated` ever had and will never decrease except when calling [Self::peak_mem_usage_set_current].
+    pub fn peak_mem_usage(&self) -> usize {
+        self.peak_mem_usage.load(Ordering::SeqCst)
+    }
+
+    /// Set the peak memory usage to the current memory usage.
+    ///
+    /// This essentially *forgets* peaks in the past.
+    pub fn peak_mem_usage_set_current(&self) {
+        let current_mem_usage =
+            self.bytes_allocated.load(Ordering::SeqCst) - self.bytes_deallocated.load(Ordering::SeqCst);
+        self.peak_mem_usage.store(current_mem_usage, Ordering::SeqCst);
     }
 }
 
@@ -252,6 +238,9 @@ unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         self.allocations.fetch_add(1, Ordering::SeqCst);
         self.bytes_allocated.fetch_add(layout.size(), Ordering::SeqCst);
+        let current_mem_usage =
+            self.bytes_allocated.load(Ordering::SeqCst) - self.bytes_deallocated.load(Ordering::SeqCst);
+        self.peak_mem_usage.fetch_max(current_mem_usage, Ordering::SeqCst);
         self.inner.alloc(layout)
     }
 
@@ -264,6 +253,9 @@ unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         self.allocations.fetch_add(1, Ordering::SeqCst);
         self.bytes_allocated.fetch_add(layout.size(), Ordering::SeqCst);
+        let current_mem_usage =
+            self.bytes_allocated.load(Ordering::SeqCst) - self.bytes_deallocated.load(Ordering::SeqCst);
+        self.peak_mem_usage.fetch_max(current_mem_usage, Ordering::SeqCst);
         self.inner.alloc_zeroed(layout)
     }
 
@@ -272,6 +264,9 @@ unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
         if new_size > layout.size() {
             let difference = new_size - layout.size();
             self.bytes_allocated.fetch_add(difference, Ordering::SeqCst);
+            let current_mem_usage =
+                self.bytes_allocated.load(Ordering::SeqCst) - self.bytes_deallocated.load(Ordering::SeqCst);
+            self.peak_mem_usage.fetch_max(current_mem_usage, Ordering::SeqCst);
         } else if new_size < layout.size() {
             let difference = layout.size() - new_size;
             self.bytes_deallocated.fetch_add(difference, Ordering::SeqCst);
