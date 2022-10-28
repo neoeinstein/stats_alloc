@@ -43,10 +43,19 @@ use std::{
     sync::atomic::{AtomicIsize, AtomicUsize, Ordering},
 };
 
+extern crate spin;
+use spin::Mutex as SpinMutex;
+
 /// An instrumenting middleware which keeps track of allocation, deallocation,
 /// and reallocation requests to the underlying global allocator.
 #[derive(Default, Debug)]
 pub struct StatsAlloc<T: GlobalAlloc> {
+    counters: SpinMutex<StatsAllocCounters>,
+    inner: T,
+}
+
+#[derive(Default, Debug)]
+struct StatsAllocCounters {
     allocations: AtomicUsize,
     deallocations: AtomicUsize,
     reallocations: AtomicUsize,
@@ -54,7 +63,6 @@ pub struct StatsAlloc<T: GlobalAlloc> {
     bytes_deallocated: AtomicUsize,
     bytes_reallocated: AtomicIsize,
     peak_mem_usage: AtomicUsize,
-    inner: T,
 }
 
 /// Allocator statistics
@@ -105,26 +113,29 @@ impl<T: GlobalAlloc> StatsAlloc<T> {
     /// allocator.
     pub const fn new(inner: T) -> Self {
         StatsAlloc {
-            allocations: AtomicUsize::new(0),
-            deallocations: AtomicUsize::new(0),
-            reallocations: AtomicUsize::new(0),
-            bytes_allocated: AtomicUsize::new(0),
-            bytes_deallocated: AtomicUsize::new(0),
-            bytes_reallocated: AtomicIsize::new(0),
-            peak_mem_usage: AtomicUsize::new(0),
+            counters: SpinMutex::new(StatsAllocCounters {
+                allocations: AtomicUsize::new(0),
+                deallocations: AtomicUsize::new(0),
+                reallocations: AtomicUsize::new(0),
+                bytes_allocated: AtomicUsize::new(0),
+                bytes_deallocated: AtomicUsize::new(0),
+                bytes_reallocated: AtomicIsize::new(0),
+                peak_mem_usage: AtomicUsize::new(0),
+            }),
             inner,
         }
     }
 
     /// Takes a snapshot of the current view of the allocator statistics.
     pub fn stats(&self) -> Stats {
+        let counters = self.counters.lock();
         Stats {
-            allocations: self.allocations.load(Ordering::SeqCst),
-            deallocations: self.deallocations.load(Ordering::SeqCst),
-            reallocations: self.reallocations.load(Ordering::SeqCst),
-            bytes_allocated: self.bytes_allocated.load(Ordering::SeqCst),
-            bytes_deallocated: self.bytes_deallocated.load(Ordering::SeqCst),
-            bytes_reallocated: self.bytes_reallocated.load(Ordering::SeqCst),
+            allocations: counters.allocations.load(Ordering::SeqCst),
+            deallocations: counters.deallocations.load(Ordering::SeqCst),
+            reallocations: counters.reallocations.load(Ordering::SeqCst),
+            bytes_allocated: counters.bytes_allocated.load(Ordering::SeqCst),
+            bytes_deallocated: counters.bytes_deallocated.load(Ordering::SeqCst),
+            bytes_reallocated: counters.bytes_reallocated.load(Ordering::SeqCst),
         }
     }
 
@@ -132,16 +143,18 @@ impl<T: GlobalAlloc> StatsAlloc<T> {
     ///
     /// It is the maximal value that `bytes_allocated - bytes_deallocated` ever had and will never decrease except when calling [Self::peak_mem_usage_set_current].
     pub fn peak_mem_usage(&self) -> usize {
-        self.peak_mem_usage.load(Ordering::SeqCst)
+        let counters = self.counters.lock();
+        counters.peak_mem_usage.load(Ordering::SeqCst)
     }
 
     /// Set the peak memory usage to the current memory usage.
     ///
     /// This essentially *forgets* peaks in the past.
     pub fn peak_mem_usage_set_current(&self) {
+        let counters = self.counters.lock();
         let current_mem_usage =
-            self.bytes_allocated.load(Ordering::SeqCst) - self.bytes_deallocated.load(Ordering::SeqCst);
-        self.peak_mem_usage.store(current_mem_usage, Ordering::SeqCst);
+            counters.bytes_allocated.load(Ordering::SeqCst) - counters.bytes_deallocated.load(Ordering::SeqCst);
+        counters.peak_mem_usage.store(current_mem_usage, Ordering::SeqCst);
     }
 }
 
@@ -236,42 +249,47 @@ unsafe impl<'a, T: GlobalAlloc + 'a> GlobalAlloc for &'a StatsAlloc<T> {
 
 unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        self.allocations.fetch_add(1, Ordering::SeqCst);
-        self.bytes_allocated.fetch_add(layout.size(), Ordering::SeqCst);
+        let counters = self.counters.lock();
+        counters.allocations.fetch_add(1, Ordering::SeqCst);
+        counters.bytes_allocated.fetch_add(layout.size(), Ordering::SeqCst);
         let current_mem_usage =
-            self.bytes_allocated.load(Ordering::SeqCst) - self.bytes_deallocated.load(Ordering::SeqCst);
-        self.peak_mem_usage.fetch_max(current_mem_usage, Ordering::SeqCst);
+            counters.bytes_allocated.load(Ordering::SeqCst) - counters.bytes_deallocated.load(Ordering::SeqCst);
+        counters.peak_mem_usage.fetch_max(current_mem_usage, Ordering::SeqCst);
         self.inner.alloc(layout)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.deallocations.fetch_add(1, Ordering::SeqCst);
-        self.bytes_deallocated.fetch_add(layout.size(), Ordering::SeqCst);
+        let counters = self.counters.lock();
+        counters.deallocations.fetch_add(1, Ordering::SeqCst);
+        counters.bytes_deallocated.fetch_add(layout.size(), Ordering::SeqCst);
         self.inner.dealloc(ptr, layout)
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        self.allocations.fetch_add(1, Ordering::SeqCst);
-        self.bytes_allocated.fetch_add(layout.size(), Ordering::SeqCst);
+        let counters = self.counters.lock();
+        counters.allocations.fetch_add(1, Ordering::SeqCst);
+        counters.bytes_allocated.fetch_add(layout.size(), Ordering::SeqCst);
         let current_mem_usage =
-            self.bytes_allocated.load(Ordering::SeqCst) - self.bytes_deallocated.load(Ordering::SeqCst);
-        self.peak_mem_usage.fetch_max(current_mem_usage, Ordering::SeqCst);
+            counters.bytes_allocated.load(Ordering::SeqCst) - counters.bytes_deallocated.load(Ordering::SeqCst);
+        counters.peak_mem_usage.fetch_max(current_mem_usage, Ordering::SeqCst);
         self.inner.alloc_zeroed(layout)
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        self.reallocations.fetch_add(1, Ordering::SeqCst);
+        let counters = self.counters.lock();
+        counters.reallocations.fetch_add(1, Ordering::SeqCst);
         if new_size > layout.size() {
             let difference = new_size - layout.size();
-            self.bytes_allocated.fetch_add(difference, Ordering::SeqCst);
+            counters.bytes_allocated.fetch_add(difference, Ordering::SeqCst);
             let current_mem_usage =
-                self.bytes_allocated.load(Ordering::SeqCst) - self.bytes_deallocated.load(Ordering::SeqCst);
-            self.peak_mem_usage.fetch_max(current_mem_usage, Ordering::SeqCst);
+                counters.bytes_allocated.load(Ordering::SeqCst) - counters.bytes_deallocated.load(Ordering::SeqCst);
+            counters.peak_mem_usage.fetch_max(current_mem_usage, Ordering::SeqCst);
         } else if new_size < layout.size() {
             let difference = layout.size() - new_size;
-            self.bytes_deallocated.fetch_add(difference, Ordering::SeqCst);
+            counters.bytes_deallocated.fetch_add(difference, Ordering::SeqCst);
         }
-        self.bytes_reallocated
+        counters
+            .bytes_reallocated
             .fetch_add(new_size.wrapping_sub(layout.size()) as isize, Ordering::SeqCst);
         self.inner.realloc(ptr, layout, new_size)
     }

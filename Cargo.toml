@@ -23,3 +23,6 @@ nightly = []
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "doc_cfg"]
+
+[dependencies]
+spin = { version = "0.9", default-features = false, features = [ "spin_mutex" ] }
