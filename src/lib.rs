@@ -53,6 +53,8 @@ pub struct StatsAlloc<T: GlobalAlloc> {
     bytes_allocated: AtomicUsize,
     bytes_deallocated: AtomicUsize,
     bytes_reallocated: AtomicIsize,
+    peak_bytes_allocated_tracker: AtomicIsize,
+    peak_bytes_allocated: AtomicUsize,
     inner: T,
 }
 
@@ -87,6 +89,10 @@ pub struct Stats {
     /// positive value indicates that resizable structures are growing, while
     /// a negative value indicates that such structures are shrinking.
     pub bytes_reallocated: isize,
+    /// Internally tracks sum of allocations and deallocations and keeps the
+    /// peak.
+    /// Call [Region::reset_peak_memory] to reset the peak counter.
+    pub peak_bytes_allocated: usize,
 }
 
 /// An instrumented instance of the system allocator.
@@ -97,6 +103,8 @@ pub static INSTRUMENTED_SYSTEM: StatsAlloc<System> = StatsAlloc {
     bytes_allocated: AtomicUsize::new(0),
     bytes_deallocated: AtomicUsize::new(0),
     bytes_reallocated: AtomicIsize::new(0),
+    peak_bytes_allocated_tracker: AtomicIsize::new(0),
+    peak_bytes_allocated: AtomicUsize::new(0),
     inner: System,
 };
 
@@ -110,6 +118,8 @@ impl StatsAlloc<System> {
             bytes_allocated: AtomicUsize::new(0),
             bytes_deallocated: AtomicUsize::new(0),
             bytes_reallocated: AtomicIsize::new(0),
+            peak_bytes_allocated_tracker: AtomicIsize::new(0),
+            peak_bytes_allocated: AtomicUsize::new(0),
             inner: System,
         }
     }
@@ -118,7 +128,6 @@ impl StatsAlloc<System> {
 impl<T: GlobalAlloc> StatsAlloc<T> {
     /// Provides access to an instrumented instance of the given global
     /// allocator.
-    #[cfg(feature = "nightly")]
     pub const fn new(inner: T) -> Self {
         StatsAlloc {
             allocations: AtomicUsize::new(0),
@@ -127,21 +136,8 @@ impl<T: GlobalAlloc> StatsAlloc<T> {
             bytes_allocated: AtomicUsize::new(0),
             bytes_deallocated: AtomicUsize::new(0),
             bytes_reallocated: AtomicIsize::new(0),
-            inner,
-        }
-    }
-
-    /// Provides access to an instrumented instance of the given global
-    /// allocator.
-    #[cfg(not(feature = "nightly"))]
-    pub fn new(inner: T) -> Self {
-        StatsAlloc {
-            allocations: AtomicUsize::new(0),
-            deallocations: AtomicUsize::new(0),
-            reallocations: AtomicUsize::new(0),
-            bytes_allocated: AtomicUsize::new(0),
-            bytes_deallocated: AtomicUsize::new(0),
-            bytes_reallocated: AtomicIsize::new(0),
+            peak_bytes_allocated_tracker: AtomicIsize::new(0),
+            peak_bytes_allocated: AtomicUsize::new(0),
             inner,
         }
     }
@@ -155,7 +151,28 @@ impl<T: GlobalAlloc> StatsAlloc<T> {
             bytes_allocated: self.bytes_allocated.load(Ordering::SeqCst),
             bytes_deallocated: self.bytes_deallocated.load(Ordering::SeqCst),
             bytes_reallocated: self.bytes_reallocated.load(Ordering::SeqCst),
+            peak_bytes_allocated: self.peak_bytes_allocated.load(Ordering::SeqCst),
         }
+    }
+
+    fn reset_peak_memory(&self) {
+        self.peak_bytes_allocated.store(0, Ordering::SeqCst);
+        self.peak_bytes_allocated_tracker.store(0, Ordering::SeqCst);
+    }
+
+    fn track_alloc(&self, bytes: usize) {
+        self.bytes_allocated.fetch_add(bytes, Ordering::SeqCst);
+        let prev = self
+            .peak_bytes_allocated_tracker
+            .fetch_add(bytes as isize, Ordering::SeqCst);
+        let current_peak = (prev + bytes as isize).max(0) as usize;
+        self.peak_bytes_allocated.fetch_max(current_peak, Ordering::SeqCst);
+    }
+
+    fn track_dealloc(&self, bytes: usize) {
+        self.bytes_deallocated.fetch_add(bytes, Ordering::SeqCst);
+        self.peak_bytes_allocated_tracker
+            .fetch_sub(bytes as isize, Ordering::SeqCst);
     }
 }
 
@@ -228,6 +245,12 @@ impl<'a, T: GlobalAlloc + 'a> Region<'a, T> {
     pub fn reset(&mut self) {
         self.initial_stats = self.alloc.stats();
     }
+
+    /// Resets the peak memory tracker to zero
+    #[inline]
+    pub fn reset_peak_memory(&mut self) {
+        self.alloc.reset_peak_memory();
+    }
 }
 
 unsafe impl<'a, T: GlobalAlloc + 'a> GlobalAlloc for &'a StatsAlloc<T> {
@@ -251,19 +274,19 @@ unsafe impl<'a, T: GlobalAlloc + 'a> GlobalAlloc for &'a StatsAlloc<T> {
 unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         self.allocations.fetch_add(1, Ordering::SeqCst);
-        self.bytes_allocated.fetch_add(layout.size(), Ordering::SeqCst);
+        self.track_alloc(layout.size());
         self.inner.alloc(layout)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         self.deallocations.fetch_add(1, Ordering::SeqCst);
-        self.bytes_deallocated.fetch_add(layout.size(), Ordering::SeqCst);
+        self.track_dealloc(layout.size());
         self.inner.dealloc(ptr, layout)
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         self.allocations.fetch_add(1, Ordering::SeqCst);
-        self.bytes_allocated.fetch_add(layout.size(), Ordering::SeqCst);
+        self.track_alloc(layout.size());
         self.inner.alloc_zeroed(layout)
     }
 
@@ -271,10 +294,10 @@ unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
         self.reallocations.fetch_add(1, Ordering::SeqCst);
         if new_size > layout.size() {
             let difference = new_size - layout.size();
-            self.bytes_allocated.fetch_add(difference, Ordering::SeqCst);
+            self.track_alloc(difference);
         } else if new_size < layout.size() {
             let difference = layout.size() - new_size;
-            self.bytes_deallocated.fetch_add(difference, Ordering::SeqCst);
+            self.track_dealloc(difference);
         }
         self.bytes_reallocated
             .fetch_add(new_size.wrapping_sub(layout.size()) as isize, Ordering::SeqCst);
