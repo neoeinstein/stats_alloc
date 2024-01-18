@@ -1,4 +1,3 @@
-//!
 //! An instrumenting middleware for global allocators in Rust, useful in testing
 //! for validating assumptions regarding allocation patterns, and potentially in
 //! production loads to monitor for memory leaks.
@@ -6,13 +5,11 @@
 //! ## Example
 //!
 //! ```
-//! extern crate stats_alloc;
-//!
-//! use stats_alloc::{Region, StatsAlloc, INSTRUMENTED_SYSTEM};
+//! use stats_alloc::{Region, StatsAlloc};
 //! use std::alloc::System;
 //!
 //! #[global_allocator]
-//! static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
+//! static GLOBAL: StatsAlloc<System> = StatsAlloc::system();
 //!
 //! fn main() {
 //!     let reg = Region::new(&GLOBAL);
@@ -89,17 +86,6 @@ pub struct Stats {
     pub bytes_reallocated: isize,
 }
 
-/// An instrumented instance of the system allocator.
-pub static INSTRUMENTED_SYSTEM: StatsAlloc<System> = StatsAlloc {
-    allocations: AtomicUsize::new(0),
-    deallocations: AtomicUsize::new(0),
-    reallocations: AtomicUsize::new(0),
-    bytes_allocated: AtomicUsize::new(0),
-    bytes_deallocated: AtomicUsize::new(0),
-    bytes_reallocated: AtomicIsize::new(0),
-    inner: System,
-};
-
 impl StatsAlloc<System> {
     /// Provides access to an instrumented instance of the system allocator.
     pub const fn system() -> Self {
@@ -118,23 +104,7 @@ impl StatsAlloc<System> {
 impl<T: GlobalAlloc> StatsAlloc<T> {
     /// Provides access to an instrumented instance of the given global
     /// allocator.
-    #[cfg(feature = "nightly")]
     pub const fn new(inner: T) -> Self {
-        StatsAlloc {
-            allocations: AtomicUsize::new(0),
-            deallocations: AtomicUsize::new(0),
-            reallocations: AtomicUsize::new(0),
-            bytes_allocated: AtomicUsize::new(0),
-            bytes_deallocated: AtomicUsize::new(0),
-            bytes_reallocated: AtomicIsize::new(0),
-            inner,
-        }
-    }
-
-    /// Provides access to an instrumented instance of the given global
-    /// allocator.
-    #[cfg(not(feature = "nightly"))]
-    pub fn new(inner: T) -> Self {
         StatsAlloc {
             allocations: AtomicUsize::new(0),
             deallocations: AtomicUsize::new(0),
@@ -267,6 +237,7 @@ unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
         self.inner.alloc_zeroed(layout)
     }
 
+    #[allow(clippy::comparison_chain)]
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         self.reallocations.fetch_add(1, Ordering::SeqCst);
         if new_size > layout.size() {

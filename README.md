@@ -9,11 +9,11 @@ production loads to monitor for memory leaks.
 ```rust
 extern crate stats_alloc;
 
-use stats_alloc::{StatsAlloc, Region, INSTRUMENTED_SYSTEM};
+use stats_alloc::{StatsAlloc, Region};
 use std::alloc::System;
 
 #[global_allocator]
-static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
+static GLOBAL: StatsAlloc<System> = StatsAlloc::system();
 
 fn example_using_region() {
     let reg = Region::new(&GLOBAL);
@@ -21,19 +21,6 @@ fn example_using_region() {
     println!("Stats at 1: {:#?}", reg.change());
     // Used here to ensure that the value is not
     // dropped before we check the statistics
-    ::std::mem::size_of_val(&x);
+    let _ = std::mem::size_of_val(&x);
 }
-``` 
-
-## Custom allocators
-
-Currenty wrapping a custom allocator requires the use of the nightly compiler
-and compiling with the "nightly" feature due to the soon to stabilize use of
-the unstable `const_fn_trait_bound` and the fact that the internals of the
-instrumenting type are not public. If that's fine with you, a custom allocator
-can be wrapped as follows:
-
-```rust
-#[global_allocator]
-static GLOBAL: StatsAlloc<System> = StatsAlloc::new(MyCustomAllocator::new());
 ```

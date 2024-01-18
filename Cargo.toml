@@ -8,6 +8,7 @@ license = "MIT"
 repository = "https://github.com/neoeinstein/stats_alloc"
 documentation = "https://docs.rs/stats_alloc/"
 readme = "README.md"
+edition = "2021"
 exclude = [
     ".gitignore",
     ".editorconfig",
@@ -15,11 +16,3 @@ exclude = [
     "rustfmt.toml",
     "tests/**/*",
 ]
-
-[features]
-default = []
-nightly = []
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "doc_cfg"]
