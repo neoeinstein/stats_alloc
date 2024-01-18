@@ -237,6 +237,7 @@ unsafe impl<T: GlobalAlloc> GlobalAlloc for StatsAlloc<T> {
         self.inner.alloc_zeroed(layout)
     }
 
+    #[allow(clippy::comparison_chain)]
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         self.reallocations.fetch_add(1, Ordering::SeqCst);
         if new_size > layout.size() {
