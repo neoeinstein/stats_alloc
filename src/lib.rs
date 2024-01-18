@@ -1,4 +1,3 @@
-//!
 //! An instrumenting middleware for global allocators in Rust, useful in testing
 //! for validating assumptions regarding allocation patterns, and potentially in
 //! production loads to monitor for memory leaks.
@@ -118,23 +117,7 @@ impl StatsAlloc<System> {
 impl<T: GlobalAlloc> StatsAlloc<T> {
     /// Provides access to an instrumented instance of the given global
     /// allocator.
-    #[cfg(feature = "nightly")]
     pub const fn new(inner: T) -> Self {
-        StatsAlloc {
-            allocations: AtomicUsize::new(0),
-            deallocations: AtomicUsize::new(0),
-            reallocations: AtomicUsize::new(0),
-            bytes_allocated: AtomicUsize::new(0),
-            bytes_deallocated: AtomicUsize::new(0),
-            bytes_reallocated: AtomicIsize::new(0),
-            inner,
-        }
-    }
-
-    /// Provides access to an instrumented instance of the given global
-    /// allocator.
-    #[cfg(not(feature = "nightly"))]
-    pub fn new(inner: T) -> Self {
         StatsAlloc {
             allocations: AtomicUsize::new(0),
             deallocations: AtomicUsize::new(0),
