@@ -5,11 +5,11 @@
 //! ## Example
 //!
 //! ```
-//! use stats_alloc::{Region, StatsAlloc, INSTRUMENTED_SYSTEM};
+//! use stats_alloc::{Region, StatsAlloc};
 //! use std::alloc::System;
 //!
 //! #[global_allocator]
-//! static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
+//! static GLOBAL: StatsAlloc<System> = StatsAlloc::system();
 //!
 //! fn main() {
 //!     let reg = Region::new(&GLOBAL);
@@ -85,17 +85,6 @@ pub struct Stats {
     /// a negative value indicates that such structures are shrinking.
     pub bytes_reallocated: isize,
 }
-
-/// An instrumented instance of the system allocator.
-pub static INSTRUMENTED_SYSTEM: StatsAlloc<System> = StatsAlloc {
-    allocations: AtomicUsize::new(0),
-    deallocations: AtomicUsize::new(0),
-    reallocations: AtomicUsize::new(0),
-    bytes_allocated: AtomicUsize::new(0),
-    bytes_deallocated: AtomicUsize::new(0),
-    bytes_reallocated: AtomicIsize::new(0),
-    inner: System,
-};
 
 impl StatsAlloc<System> {
     /// Provides access to an instrumented instance of the system allocator.
