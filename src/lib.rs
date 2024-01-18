@@ -5,8 +5,6 @@
 //! ## Example
 //!
 //! ```
-//! extern crate stats_alloc;
-//!
 //! use stats_alloc::{Region, StatsAlloc, INSTRUMENTED_SYSTEM};
 //! use std::alloc::System;
 //!
